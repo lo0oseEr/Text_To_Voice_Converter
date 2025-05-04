@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Text Reader</title>
+        <link rel="stylesheet" href="style.css">
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&family=Pacifico&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    </head>
+    <body>
+        <div class="hero">
+            <div class="container">
+                <div class="header">
+                    <h1 class="title">Text To Speech</h1>
+                    <p class="subtitle">Transform your text into natural-sounding speech</p>
+                </div>
+                
+                <div class="main-content">
+                    <div class="input-section">
+                        <div class="textarea-wrapper">
+                            <textarea id="text-input" placeholder="Enter your text here..."></textarea>
+                            <div class="character-count-container">
+                                <div class="character-count">
+                                    <i class="fas fa-font"></i>
+                                    <span id="char-count">0</span> characters
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="controls">
+                        <div class="voice-select-wrapper">
+                            <i class="fas fa-microphone"></i>
+                            <select id="voiceSelect">
+                                <option value="default">Select a voice</option>
+                            </select>
+                        </div>
+                        
+                        <div class="button-group">
+                            <button id="speak-btn" class="primary-btn">
+                                <i class="fas fa-play"></i>
+                                Speak
+                            </button>
+                            <button id="clear-btn" class="secondary-btn">
+                                <i class="fas fa-trash"></i>
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-bar">
+                    <div id="status-message" class="status-message"></div>
+                    <div class="loading-spinner" id="loading-spinner">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            const API_URL = 'http://127.0.0.1:8080';
+            const textInput = document.getElementById('text-input');
+            const voiceSelect = document.getElementById('voiceSelect');
+            const speakBtn = document.getElementById('speak-btn');
+            const clearBtn = document.getElementById('clear-btn');
+            const charCount = document.getElementById('char-count');
+            const statusMessage = document.getElementById('status-message');
+            const loadingSpinner = document.getElementById('loading-spinner');
+
+            // Update character count
+            textInput.addEventListener('input', () => {
+                charCount.textContent = textInput.value.length;
+            });
+
+            // Clear text
+            clearBtn.addEventListener('click', () => {
+                textInput.value = '';
+                charCount.textContent = '0';
+                showStatus('Text cleared', 'success');
+            });
+
+            // Load available voices
+            async function loadVoices() {
+                try {
+                    showStatus('Loading voices...', 'info');
+                    const response = await fetch(`${API_URL}/api/voices`);
+                    const data = await response.json();
+                    
+                    if (data.voices) {
+                        const voices = data.voices;
+                        
+                        // Group voices by accent
+                        const voicesByAccent = voices.reduce((acc, voice) => {
+                            if (!acc[voice.accent]) {
+                                acc[voice.accent] = [];
+                            }
+                            acc[voice.accent].push(voice);
+                            return acc;
+                        }, {});
+
+                        // Clear existing options except default
+                        while (voiceSelect.options.length > 1) {
+                            voiceSelect.remove(1);
+                        }
+
+                        // Add voices grouped by accent
+                        Object.entries(voicesByAccent).forEach(([accent, accentVoices]) => {
+                            const group = document.createElement('optgroup');
+                            group.label = accent;
+                            
+                            accentVoices.forEach(voice => {
+                                const option = document.createElement('option');
+                                option.value = voice.name;
+                                option.textContent = `${voice.name} (${voice.gender})`;
+                                group.appendChild(option);
+                            });
+                            
+                            voiceSelect.appendChild(group);
+                        });
+                        showStatus('Voices loaded successfully', 'success');
+                    }
+                } catch (error) {
+                    console.error('Error loading voices:', error);
+                    showStatus('Error loading voices. Please make sure the server is running.', 'error');
+                }
+            }
+
+            // Handle text-to-speech
+            async function speakText() {
+                const text = textInput.value.trim();
+                if (!text) {
+                    showStatus('Please enter some text to speak', 'error');
+                    return;
+                }
+
+                try {
+                    showStatus('Speaking...', 'info');
+                    loadingSpinner.style.display = 'block';
+                    speakBtn.disabled = true;
+
+                    const response = await fetch(`${API_URL}/api/speak`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            text: text,
+                            voice: voiceSelect.value
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (data.error) {
+                        showStatus(data.error, 'error');
+                    } else {
+                        showStatus('Text spoken successfully!', 'success');
+                    }
+                } catch (error) {
+                    console.error('Error speaking text:', error);
+                    showStatus('Error occurred while trying to speak text', 'error');
+                } finally {
+                    loadingSpinner.style.display = 'none';
+                    speakBtn.disabled = false;
+                }
+            }
+
+            // Show status message
+            function showStatus(message, type) {
+                statusMessage.textContent = message;
+                statusMessage.className = `status-message ${type}`;
+                setTimeout(() => {
+                    statusMessage.textContent = '';
+                    statusMessage.className = 'status-message';
+                }, 3000);
+            }
+
+            // Event listeners
+            speakBtn.addEventListener('click', speakText);
+
+            // Add hover effect to buttons
+            speakBtn.addEventListener('mouseover', () => {
+                speakBtn.classList.add('hover');
+            });
+            speakBtn.addEventListener('mouseout', () => {
+                speakBtn.classList.remove('hover');
+            });
+
+            // Load voices when page loads
+            loadVoices();
+        </script>
+    </body>
+</html>
+
